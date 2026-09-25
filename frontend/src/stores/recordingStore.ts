@@ -1,9 +1,12 @@
 // 录音片段状态管理。
 import { create } from 'zustand'
 import {
+  approveRecordingReview,
   createRecording,
   deleteRecording,
   listRecordings,
+  rejectRecordingReview,
+  submitRecordingForReview,
   updateRecordingSummary,
   uploadRecordingAudio,
 } from '../api/recording'
@@ -17,6 +20,9 @@ interface RecordingState {
   create: (payload: { project_id: number; question_id: number; duration_seconds?: number }) => Promise<Recording>
   uploadAudio: (id: number, blob: Blob, duration: number, onProgress?: (p: number) => void) => Promise<void>
   updateSummary: (id: number, summary: string) => Promise<void>
+  submitForReview: (id: number) => Promise<void>
+  approveReview: (id: number, summary?: string) => Promise<void>
+  rejectReview: (id: number, comment: string) => Promise<void>
   remove: (id: number) => Promise<void>
 }
 
@@ -53,6 +59,21 @@ export const useRecordingStore = create<RecordingState>((set) => ({
 
   async updateSummary(id, summary) {
     const updated = await updateRecordingSummary(id, summary)
+    set((s) => ({ recordings: s.recordings.map((r) => (r.id === id ? updated : r)) }))
+  },
+
+  async submitForReview(id) {
+    const updated = await submitRecordingForReview(id)
+    set((s) => ({ recordings: s.recordings.map((r) => (r.id === id ? updated : r)) }))
+  },
+
+  async approveReview(id, summary) {
+    const updated = await approveRecordingReview(id, summary)
+    set((s) => ({ recordings: s.recordings.map((r) => (r.id === id ? updated : r)) }))
+  },
+
+  async rejectReview(id, comment) {
+    const updated = await rejectRecordingReview(id, comment)
     set((s) => ({ recordings: s.recordings.map((r) => (r.id === id ? updated : r)) }))
   },
 

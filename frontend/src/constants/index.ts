@@ -50,6 +50,19 @@ export const RECORDING_STATUS_TEXT: Record<string, string> = {
   [RECORDING_STATUS_FAILED]: '失败',
 }
 
+// 摘要审核状态机枚举（与后端 constants/review_status.go 同步）
+export const REVIEW_STATUS_DRAFT = 'draft'
+export const REVIEW_STATUS_PENDING = 'pending'
+export const REVIEW_STATUS_APPROVED = 'approved'
+export const REVIEW_STATUS_REJECTED = 'rejected'
+
+export const REVIEW_STATUS_TEXT: Record<string, string> = {
+  [REVIEW_STATUS_DRAFT]: '待提交',
+  [REVIEW_STATUS_PENDING]: '待审核',
+  [REVIEW_STATUS_APPROVED]: '已通过',
+  [REVIEW_STATUS_REJECTED]: '已退回',
+}
+
 // 错误码（与后端 constants/error_codes.go 同步）
 export const ERROR_CODES = {
   OK: 0,
@@ -66,8 +79,10 @@ export const ERROR_CODES = {
   PROJECT_STATUS: 40902,
   RECORDING_STATUS: 40903,
   MARKER_CONFLICT: 40904,
+  REVIEW_STATUS: 40905,
 } as const
 
 export type ProjectStatus = typeof PROJECT_STATUS_DRAFT | typeof PROJECT_STATUS_IN_PROGRESS | typeof PROJECT_STATUS_COMPLETED | typeof PROJECT_STATUS_ARCHIVED
 export type RecordingStatus = typeof RECORDING_STATUS_RECORDING | typeof RECORDING_STATUS_PROCESSING | typeof RECORDING_STATUS_READY | typeof RECORDING_STATUS_FAILED
+export type ReviewStatus = typeof REVIEW_STATUS_DRAFT | typeof REVIEW_STATUS_PENDING | typeof REVIEW_STATUS_APPROVED | typeof REVIEW_STATUS_REJECTED
 export type Role = typeof ROLE_ADMIN | typeof ROLE_INTERVIEWER | typeof ROLE_ARCHIVIST

@@ -40,11 +40,17 @@ func (s *timelineMarkerService) Create(actor *model.User, req *dto.CreateTimelin
 		}
 		return nil, util.NewAppError(constants.CodeInternal, fmt.Sprintf("查询项目 %d 失败", req.ProjectID), err)
 	}
-	if _, err := s.recordingRepo.FindByID(req.RecordingID); err != nil {
+	recording, err := s.recordingRepo.FindByID(req.RecordingID)
+	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, util.NewAppError(constants.CodeNotFound, fmt.Sprintf("录音 %d 不存在", req.RecordingID), err)
 		}
 		return nil, util.NewAppError(constants.CodeInternal, fmt.Sprintf("查询录音 %d 失败", req.RecordingID), err)
+	}
+	// 只有审核通过的片段才属于项目时间轴，未通过的片段不允许标注节点。
+	if recording.ReviewStatus != constants.ReviewStatusApproved {
+		return nil, util.NewAppError(constants.CodeReviewStatus,
+			fmt.Sprintf("录音 %d 摘要尚未审核通过，不能标注时间轴节点", req.RecordingID), nil)
 	}
 	marker := &model.TimelineMarker{
 		ProjectID:       req.ProjectID,

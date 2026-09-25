@@ -1,7 +1,7 @@
 import { del, get, post, put, upload } from '../utils/request'
 import type { Recording } from './types'
 
-export function listRecordings(params: { project_id?: number; question_id?: number }) {
+export function listRecordings(params: { project_id?: number; question_id?: number; review_status?: string }) {
   return get<{ list: Recording[] }>('/recordings', params)
 }
 
@@ -24,6 +24,18 @@ export function updateRecording(id: number, payload: { duration_seconds?: number
 
 export function updateRecordingSummary(id: number, summary: string) {
   return put<Recording>(`/recordings/${id}/summary`, { summary })
+}
+
+export function submitRecordingForReview(id: number) {
+  return post<Recording>(`/recordings/${id}/submit-review`)
+}
+
+export function approveRecordingReview(id: number, summary?: string) {
+  return post<Recording>(`/recordings/${id}/approve`, summary !== undefined ? { summary } : {})
+}
+
+export function rejectRecordingReview(id: number, comment: string) {
+  return post<Recording>(`/recordings/${id}/reject`, { comment })
 }
 
 export function uploadRecordingAudio(id: number, file: Blob, durationSeconds: number, onProgress?: (p: number) => void) {

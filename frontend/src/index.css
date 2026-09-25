@@ -298,6 +298,9 @@ textarea:focus {
 .badge-processing { background: #fef3c7; color: #92400e; }
 .badge-ready { background: #d1fae5; color: #065f46; }
 .badge-failed { background: #e5e7eb; color: #6b7280; }
+.badge-pending { background: #fef3c7; color: #92400e; }
+.badge-approved { background: #d1fae5; color: #065f46; }
+.badge-rejected { background: #fee2e2; color: #991b1b; }
 .badge-default { background: #e5e7eb; color: #374151; }
 
 .empty-state {
@@ -632,6 +635,64 @@ textarea:focus {
   margin-top: 8px;
   flex-wrap: wrap;
   font-size: 13px;
+}
+
+.review-banner {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 13px;
+}
+
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fafafa;
+}
+
+.review-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.review-summary-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.review-summary-row input {
+  flex: 1;
+}
+
+.review-comment {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 13px;
+}
+
+.review-meta {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.reject-input {
+  max-width: 240px;
 }
 
 .pagination {

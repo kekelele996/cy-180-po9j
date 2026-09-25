@@ -1,6 +1,7 @@
 import {
   PROJECT_STATUS_TEXT,
   RECORDING_STATUS_TEXT,
+  REVIEW_STATUS_TEXT,
   ROLE_TEXT,
 } from '../constants'
 
@@ -25,6 +26,10 @@ export function projectStatusText(status: string): string {
 
 export function recordingStatusText(status: string): string {
   return RECORDING_STATUS_TEXT[status] || status
+}
+
+export function reviewStatusText(status: string): string {
+  return REVIEW_STATUS_TEXT[status] || status
 }
 
 export function roleText(role: string): string {

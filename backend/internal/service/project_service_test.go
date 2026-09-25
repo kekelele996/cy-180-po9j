@@ -12,10 +12,49 @@ import (
 )
 
 type fakeProjectRepo struct {
-	projects map[uint]*model.Project
-	updated  *model.Project
+	projects  map[uint]*model.Project
+	updated   *model.Project
 	forUpdate bool
-	err      error
+	err       error
+}
+
+type fakeRecordingRepoForProject struct {
+	reviewCounts map[string]int64
+}
+
+func (f *fakeRecordingRepoForProject) Create(recording *model.Recording) error { return nil }
+func (f *fakeRecordingRepoForProject) FindByID(id uint) (*model.Recording, error) {
+	return nil, repository.ErrNotFound
+}
+func (f *fakeRecordingRepoForProject) ListByProject(projectID uint) ([]model.Recording, error) {
+	return nil, nil
+}
+func (f *fakeRecordingRepoForProject) ListByQuestion(questionID uint) ([]model.Recording, error) {
+	return nil, nil
+}
+func (f *fakeRecordingRepoForProject) ListByProjectReviewStatus(projectID uint, reviewStatus string) ([]model.Recording, error) {
+	return nil, nil
+}
+func (f *fakeRecordingRepoForProject) FindByIDForUpdate(id uint) (*model.Recording, error) {
+	return nil, repository.ErrNotFound
+}
+func (f *fakeRecordingRepoForProject) Update(recording *model.Recording) error { return nil }
+func (f *fakeRecordingRepoForProject) UpdateStatus(recording *model.Recording) error {
+	return nil
+}
+func (f *fakeRecordingRepoForProject) Delete(id uint) error { return nil }
+func (f *fakeRecordingRepoForProject) CountByProject(projectID uint) (int64, error) {
+	return 0, nil
+}
+func (f *fakeRecordingRepoForProject) CountReviewByProject(projectID uint, reviewStatuses []string) (int64, error) {
+	var total int64
+	for _, st := range reviewStatuses {
+		total += f.reviewCounts[st]
+	}
+	return total, nil
+}
+func (f *fakeRecordingRepoForProject) CountReviewGroupedByProject(projectID uint) (map[string]int64, error) {
+	return f.reviewCounts, nil
 }
 
 func (f *fakeProjectRepo) Create(project *model.Project) error {
@@ -75,7 +114,7 @@ func TestProjectServiceTransitionStatus(t *testing.T) {
 			repo := &fakeProjectRepo{projects: map[uint]*model.Project{
 				1: {ID: 1, Title: "测试项目", Status: tc.from},
 			}}
-			svc := NewProjectService(repo, slog.Default())
+			svc := NewProjectService(repo, &fakeRecordingRepoForProject{reviewCounts: map[string]int64{}}, slog.Default())
 			got, err := svc.TransitionStatus(actor, 1, tc.to)
 			if tc.wantErr {
 				if err == nil {
@@ -102,7 +141,7 @@ func TestProjectServiceTransitionStatus(t *testing.T) {
 
 func TestProjectServiceCreate(t *testing.T) {
 	repo := &fakeProjectRepo{projects: map[uint]*model.Project{}}
-	svc := NewProjectService(repo, slog.Default())
+	svc := NewProjectService(repo, &fakeRecordingRepoForProject{reviewCounts: map[string]int64{}}, slog.Default())
 	actor := &model.User{ID: 2, Username: "archivist", Role: constants.RoleArchivist}
 	req := &dto.CreateProjectRequest{
 		Title:           "老城记忆",
@@ -119,6 +158,37 @@ func TestProjectServiceCreate(t *testing.T) {
 	}
 	if project.CreatedBy != actor.ID {
 		t.Fatalf("created_by = %d, want %d", project.CreatedBy, actor.ID)
+	}
+}
+
+func TestProjectServiceArchiveBlockedByPendingReview(t *testing.T) {
+	actor := &model.User{ID: 1, Username: "archivist", Role: constants.RoleArchivist}
+	cases := []struct {
+		name    string
+		counts  map[string]int64
+		wantErr bool
+	}{
+		{name: "all approved", counts: map[string]int64{constants.ReviewStatusApproved: 3}, wantErr: false},
+		{name: "pending blocks", counts: map[string]int64{constants.ReviewStatusApproved: 2, constants.ReviewStatusPending: 1}, wantErr: true},
+		{name: "rejected blocks", counts: map[string]int64{constants.ReviewStatusApproved: 2, constants.ReviewStatusRejected: 2}, wantErr: true},
+		{name: "draft not blocked", counts: map[string]int64{constants.ReviewStatusDraft: 1}, wantErr: false},
+		{name: "no recordings", counts: map[string]int64{}, wantErr: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			projectRepo := &fakeProjectRepo{projects: map[uint]*model.Project{
+				1: {ID: 1, Title: "测试项目", Status: constants.ProjectStatusCompleted},
+			}}
+			recordingRepo := &fakeRecordingRepoForProject{reviewCounts: tc.counts}
+			svc := NewProjectService(projectRepo, recordingRepo, slog.Default())
+			_, err := svc.TransitionStatus(actor, 1, constants.ProjectStatusArchived)
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected archive to be rejected")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	}
 }
 

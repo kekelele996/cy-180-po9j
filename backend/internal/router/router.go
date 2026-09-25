@@ -32,7 +32,7 @@ func Setup(cfg *config.Config, db *gorm.DB, rdb *redis.Client, logger *slog.Logg
 
 	// service
 	userSvc := service.NewUserService(userRepo, cfg, logger)
-	projectSvc := service.NewProjectService(projectRepo, logger)
+	projectSvc := service.NewProjectService(projectRepo, recordingRepo, logger)
 	questionSvc := service.NewQuestionService(questionRepo, projectRepo, logger)
 	recordingSvc := service.NewRecordingService(recordingRepo, projectRepo, questionRepo, logger)
 	markerSvc := service.NewTimelineMarkerService(markerRepo, projectRepo, recordingRepo, logger)

@@ -111,7 +111,7 @@ function RecorderPanel({
   questionId: number
   onRecorded: (msg: string) => void
 }) {
-  const { create, uploadAudio, updateSummary, fetchByQuestion } = useRecordingStore()
+  const { create, uploadAudio, updateSummary, submitForReview, fetchByQuestion } = useRecordingStore()
   const { markers, fetchByRecording, create: createMarker } = useTimelineStore()
   const [recording, setRecording] = useState(false)
   const [seconds, setSeconds] = useState(0)
@@ -228,54 +228,87 @@ function RecorderPanel({
             <div key={r.id} className="recording-row">
               <div className="recording-meta">
                 <StatusBadge status={r.status} type="recording" />
+                <StatusBadge status={r.review_status} type="review" />
                 <span className="muted">{formatDuration(r.duration_seconds)}</span>
               </div>
               <AudioPlayer recordingId={r.id} durationSeconds={r.duration_seconds} />
-              <div className="summary-edit">
-                <input
-                  value={summaryDraft || r.summary}
-                  placeholder="写一句话摘要"
-                  onChange={(e) => setSummaryDraft(e.target.value)}
-                />
-                <button
-                  className="btn btn-plain btn-small"
-                  disabled={!summaryDraft.trim()}
-                  onClick={async () => {
-                    await updateSummary(r.id, summaryDraft.trim())
-                    setSummaryDraft('')
-                    reload()
-                  }}
-                >
-                  保存摘要
-                </button>
-              </div>
-              <div className="marker-actions">
-                <span className="muted">时间轴节点：</span>
-                {markers
-                  .filter((m) => m.recording_id === r.id)
-                  .map((m) => (
-                    <span key={m.id} className="marker-chip">
-                      {m.label}
-                    </span>
-                  ))}
-                <input
-                  placeholder="新增节点，如：讲到参军经历"
-                  style={{ maxWidth: 220 }}
-                  id={`marker-input-${r.id}`}
-                />
-                <button
-                  className="btn btn-plain btn-small"
-                  onClick={() => {
-                    const input = document.getElementById(`marker-input-${r.id}`) as HTMLInputElement
-                    if (input?.value.trim()) {
-                      addMarker(r.id, input.value.trim())
-                      input.value = ''
-                    }
-                  }}
-                >
-                  ＋ 标注
-                </button>
-              </div>
+              {(r.review_status === 'draft' || r.review_status === 'rejected') && (
+                <div className="summary-edit">
+                  <input
+                    value={summaryDraft || r.summary}
+                    placeholder="写一句话摘要"
+                    onChange={(e) => setSummaryDraft(e.target.value)}
+                  />
+                  <button
+                    className="btn btn-plain btn-small"
+                    disabled={!summaryDraft.trim()}
+                    onClick={async () => {
+                      await updateSummary(r.id, summaryDraft.trim())
+                      setSummaryDraft('')
+                      reload()
+                    }}
+                  >
+                    保存摘要
+                  </button>
+                  <button
+                    className="btn btn-primary btn-small"
+                    disabled={!(summaryDraft.trim() || r.summary)}
+                    onClick={async () => {
+                      if (summaryDraft.trim()) {
+                        await updateSummary(r.id, summaryDraft.trim())
+                        setSummaryDraft('')
+                      }
+                      await submitForReview(r.id)
+                      await reload()
+                      onRecorded('已提交摘要审核，通过后片段将进入项目时间轴')
+                    }}
+                  >
+                    提交审核
+                  </button>
+                </div>
+              )}
+              {r.review_status === 'pending' && (
+                <div className="muted" style={{ marginTop: 8 }}>
+                  摘要已提交，等待档案员审核…
+                </div>
+              )}
+              {r.review_status === 'rejected' && r.review_comment && (
+                <div className="review-comment">退回意见：{r.review_comment}</div>
+              )}
+              {r.review_status === 'approved' && (
+                <div className="marker-actions">
+                  <span className="muted">时间轴节点：</span>
+                  {markers
+                    .filter((m) => m.recording_id === r.id)
+                    .map((m) => (
+                      <span key={m.id} className="marker-chip">
+                        {m.label}
+                      </span>
+                    ))}
+                  <input
+                    placeholder="新增节点，如：讲到参军经历"
+                    style={{ maxWidth: 220 }}
+                    id={`marker-input-${r.id}`}
+                  />
+                  <button
+                    className="btn btn-plain btn-small"
+                    onClick={() => {
+                      const input = document.getElementById(`marker-input-${r.id}`) as HTMLInputElement
+                      if (input?.value.trim()) {
+                        addMarker(r.id, input.value.trim())
+                        input.value = ''
+                      }
+                    }}
+                  >
+                    ＋ 标注
+                  </button>
+                </div>
+              )}
+              {r.review_status !== 'approved' && (
+                <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+                  审核通过后才能标注时间轴节点。
+                </div>
+              )}
             </div>
           ))}
         </div>

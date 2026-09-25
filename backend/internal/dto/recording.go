@@ -28,3 +28,13 @@ type RecordingResponse struct {
 	CreatedAt       string `json:"created_at"`
 	UpdatedAt       string `json:"updated_at"`
 }
+
+// ReviewRecordingRequest 摘要审核通过请求，摘要可选，审核时可直接修改。
+type ReviewRecordingRequest struct {
+	Summary string `json:"summary" binding:"omitempty,max=512"`
+}
+
+// RejectRecordingRequest 摘要审核退回请求，必须填写退回意见。
+type RejectRecordingRequest struct {
+	Comment string `json:"comment" binding:"required,max=512"`
+}

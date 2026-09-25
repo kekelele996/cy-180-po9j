@@ -81,14 +81,26 @@ paths:
     delete: { summary: 删除问题, tags: [questions], security: [{ BearerAuth: [] }] }
   /recordings:
     get:
-      summary: 录音列表（project_id 或 question_id）
+      summary: 录音列表（project_id 或 question_id，可选 review_status 过滤）
       tags: [recordings]
       security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: project_id, in: query, schema: { type: integer } }
+        - { name: question_id, in: query, schema: { type: integer } }
+        - { name: review_status, in: query, schema: { type: string, enum: [draft, pending, approved, rejected] } }
     post: { summary: 创建录音记录, tags: [recordings], security: [{ BearerAuth: [] }] }
   /recordings/{id}:
     get: { summary: 录音详情, tags: [recordings], security: [{ BearerAuth: [] }] }
     put: { summary: 更新录音, tags: [recordings], security: [{ BearerAuth: [] }] }
     delete: { summary: 删除录音, tags: [recordings], security: [{ BearerAuth: [] }] }
+  /recordings/{id}/summary:
+    put: { summary: 更新一句话摘要（pending 状态锁定）, tags: [recordings], security: [{ BearerAuth: [] }] }
+  /recordings/{id}/submit-review:
+    post: { summary: 提交摘要审核（采访员/管理员，需有音频与摘要）, tags: [recordings], security: [{ BearerAuth: [] }] }
+  /recordings/{id}/approve:
+    post: { summary: 摘要审核通过，可同时修改摘要（档案员/管理员）, tags: [recordings], security: [{ BearerAuth: [] }] }
+  /recordings/{id}/reject:
+    post: { summary: 摘要审核退回，必须填写意见（档案员/管理员）, tags: [recordings], security: [{ BearerAuth: [] }] }
   /recordings/{id}/audio:
     post: { summary: 上传录音文件(multipart), tags: [recordings], security: [{ BearerAuth: [] }] }
     get: { summary: 播放录音音频流, tags: [recordings], security: [{ BearerAuth: [] }] }

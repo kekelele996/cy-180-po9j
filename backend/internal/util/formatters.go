@@ -44,6 +44,22 @@ func RecordingStatusText(status string) string {
 	}
 }
 
+// ReviewStatusText 返回摘要审核状态的展示文本。
+func ReviewStatusText(status string) string {
+	switch status {
+	case constants.ReviewStatusDraft:
+		return "待提交"
+	case constants.ReviewStatusPending:
+		return "待审核"
+	case constants.ReviewStatusApproved:
+		return "已通过"
+	case constants.ReviewStatusRejected:
+		return "已退回"
+	default:
+		return "未知"
+	}
+}
+
 // RoleText 返回角色的展示文本。
 func RoleText(role string) string {
 	switch role {

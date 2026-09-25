@@ -35,7 +35,8 @@ docker compose down -v --remove-orphans
 - 采访项目管理：创建、编辑、状态流转（草稿 → 进行中 → 已完成 → 已归档）、删除
 - 采访问题管理：为项目添加问题清单，作为录音提纲
 - 录音管理：浏览器端录音 → 上传 MinIO → 自动关联到对应问题 → 一句话摘要
-- 时间轴：按项目/录音标注关键节点，项目页按时间线展示所有片段并支持播放
+- 摘要审核：采访员把有音频的片段提交给档案员/管理员审核；审核时可修改摘要、填写意见退回；只有审核通过的片段才进入项目时间轴
+- 时间轴：按项目/录音标注关键节点，项目页时间线仅展示审核通过的片段并支持播放；归档时若仍有待审核/已退回片段会被拒绝并提示条数
 - 操作审计日志（仅管理员）、全局错误处理与请求追踪（request_id）
 
 ## 技术栈
@@ -156,9 +157,14 @@ npm run dev                # 默认 http://localhost:5173，/api 代理到 http:
 | GET | /api/v1/recordings/:id | 录音详情 | 登录 |
 | PUT | /api/v1/recordings/:id | 更新录音 | 登录 |
 | PUT | /api/v1/recordings/:id/summary | 更新一句话摘要 | 登录 |
+| POST | /api/v1/recordings/:id/submit-review | 提交摘要审核（需有音频与摘要） | 采访员 / 管理员 |
+| POST | /api/v1/recordings/:id/approve | 摘要审核通过（可同时修改摘要） | 档案员 / 管理员 |
+| POST | /api/v1/recordings/:id/reject | 摘要审核退回（必须填写意见） | 档案员 / 管理员 |
 | POST | /api/v1/recordings/:id/audio | 上传录音（multipart） | 登录 |
 | GET | /api/v1/recordings/:id/audio | 播放音频流 | 登录 |
 | DELETE | /api/v1/recordings/:id | 删除录音 | 登录 |
+
+> 录音列表支持 `review_status=draft|pending|approved|rejected` 过滤（如 `GET /recordings?project_id=1&review_status=approved` 即项目时间线数据源）。归档项目（`PUT /projects/:id/status` → archived）时，若项目内还有待审核或已退回的片段，接口返回 409 并在 message 中告知两类片段各有多少条。
 | GET | /api/v1/timeline-markers?project_id= 或 ?recording_id= | 时间轴节点（复用 TimelineMarkerService.List） | 登录 |
 | POST | /api/v1/timeline-markers | 标注节点 | 登录 |
 | PUT | /api/v1/timeline-markers/:id | 更新节点 | 登录 |
@@ -204,7 +210,23 @@ curl -sS -X PUT http://localhost:9180/api/v1/recordings/1/summary \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"summary":"王奶奶回忆童年在胡同里捉迷藏的趣事"}'
 
-# 标注时间轴节点
+# 采访员提交摘要审核（录音必须已有音频）
+curl -sS -X POST http://localhost:9180/api/v1/recordings/1/submit-review -H "Authorization: Bearer $TOKEN"
+
+# 档案员/管理员审核通过（可顺手修改摘要）
+curl -sS -X POST http://localhost:9180/api/v1/recordings/1/approve \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"summary":"王奶奶回忆童年在胡同里捉迷藏、跳皮筋的趣事"}'
+
+# 档案员/管理员填写意见后退回
+curl -sS -X POST http://localhost:9180/api/v1/recordings/1/reject \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"comment":"摘要过短，请补充时间与人物"}'
+
+# 项目时间线：仅取审核通过的片段
+curl -sS "http://localhost:9180/api/v1/recordings?project_id=1&review_status=approved" -H "Authorization: Bearer $TOKEN"
+
+# 标注时间轴节点（仅审核通过的片段允许标注）
 curl -sS -X POST http://localhost:9180/api/v1/timeline-markers \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"project_id":1,"recording_id":1,"timestamp_second":6,"label":"讲到胡同捉迷藏","note":"情绪激动"}'
@@ -282,6 +304,34 @@ curl -sS "http://localhost:9180/api/v1/audit-logs?page=1&page_size=10" -H "Autho
 - `frontend/src/pages/projects/ProjectDetailPage.tsx`（时间线状态展示）
 - `frontend/src/pages/interview/InterviewPage.tsx`（录音面板状态展示）
 - `frontend/src/api/types.ts`（RecordingStatus 类型）
+
+### 4. 摘要审核状态 ReviewStatus（draft / pending / approved / rejected）
+
+后端出现位置：
+- `backend/internal/constants/review_status.go`（定义、校验、提交/审核动作校验 CanSubmitReview / CanReview）
+- `backend/internal/model/recording.go`（review_status / review_comment / reviewed_by / reviewed_at 字段）
+- `backend/internal/dto/recording.go`（ReviewRecordingRequest、RejectRecordingRequest 校验）
+- `backend/internal/service/recording_service.go`（SubmitForReview / ApproveReview / RejectReview 状态机；UpdateSummary 在 pending 时锁定）
+- `backend/internal/service/timeline_marker_service.go`（仅 approved 片段允许标注时间轴节点）
+- `backend/internal/service/project_service.go`（归档前统计 pending/rejected 并拒绝）
+- `backend/internal/repository/recording_repository.go`（ListByProjectReviewStatus、CountReviewByProject、CountReviewGroupedByProject）
+- `backend/internal/handler/recording_handler.go`（submit-review / approve / reject 接口）
+- `backend/internal/router/recording.go`（RBAC：提交限采访员/管理员，审核限档案员/管理员）
+- `backend/internal/constants/log_templates.go`（LogReviewSubmit/Approve/Reject）
+- `backend/internal/constants/messages.go`（MsgReviewSubmitted/Approved/Rejected）
+- `backend/internal/constants/error_codes.go`（CodeReviewStatus）
+- `backend/internal/middleware/error_handler.go`（CodeReviewStatus → 409）
+- `backend/internal/util/formatters.go`（ReviewStatusText）
+
+前端出现位置：
+- `frontend/src/constants/index.ts`（REVIEW_STATUS_* / REVIEW_STATUS_TEXT / ReviewStatus 类型 / ERROR_CODES.REVIEW_STATUS）
+- `frontend/src/utils/format.ts`（reviewStatusText）
+- `frontend/src/components/StatusBadge.tsx`（type="review" 审核状态徽标）
+- `frontend/src/api/types.ts`（Recording.review_status 等字段、ReviewStatus 类型）
+- `frontend/src/api/recording.ts`、`frontend/src/stores/recordingStore.ts`（提交/通过/退回接口与状态更新）
+- `frontend/src/pages/projects/ProjectDetailPage.tsx`（摘要审核区按角色显隐；时间线仅渲染 approved；归档拦截提示）
+- `frontend/src/pages/interview/InterviewPage.tsx`（提交审核按钮、退回意见展示、待审提示）
+- `frontend/src/pages/projects/ProjectListPage.tsx`（归档被拒时展示后端返回的条数提示）
 
 ## Docker 部署说明
 
