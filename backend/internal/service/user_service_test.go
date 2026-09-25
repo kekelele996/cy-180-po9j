@@ -61,22 +61,22 @@ func newTestUserService(repo repository.UserRepository) *userService {
 
 func TestUserServiceRegister(t *testing.T) {
 	cases := []struct {
-		name    string
-		repo    repository.UserRepository
-		req     *dto.RegisterRequest
-		wantErr bool
+		name     string
+		repo     repository.UserRepository
+		req      *dto.RegisterRequest
+		wantErr  bool
 		wantRole string
 	}{
 		{
-			name: "valid interviewer default role",
-			repo: &fakeUserRepo{},
-			req:  &dto.RegisterRequest{Username: "alice", Password: "secret123", DisplayName: "Alice"},
+			name:     "valid interviewer default role",
+			repo:     &fakeUserRepo{},
+			req:      &dto.RegisterRequest{Username: "alice", Password: "secret123", DisplayName: "Alice"},
 			wantRole: constants.RoleInterviewer,
 		},
 		{
-			name: "explicit archivist role",
-			repo: &fakeUserRepo{},
-			req:  &dto.RegisterRequest{Username: "bob", Password: "secret123", DisplayName: "Bob", Role: constants.RoleArchivist},
+			name:     "explicit archivist role",
+			repo:     &fakeUserRepo{},
+			req:      &dto.RegisterRequest{Username: "bob", Password: "secret123", DisplayName: "Bob", Role: constants.RoleArchivist},
 			wantRole: constants.RoleArchivist,
 		},
 		{

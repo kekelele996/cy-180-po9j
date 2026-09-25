@@ -3,7 +3,7 @@ package constants
 
 // 统一响应与错误码。
 const (
-	CodeOK              = 0    // 成功
+	CodeOK              = 0     // 成功
 	CodeBadRequest      = 40000 // 参数错误
 	CodeUnauthorized    = 40100 // 未认证
 	CodeForbidden       = 40300 // 无权限

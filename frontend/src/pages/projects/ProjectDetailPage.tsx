@@ -1,4 +1,4 @@
-// 项目详情页：基本信息、采访问题、时间线（录音片段 + 关键节点 + 一句话摘要）。
+// 项目详情页：基本信息、采访问题、摘要审核、时间线（仅审核通过的录音片段 + 关键节点）。
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import AudioPlayer from '../../components/AudioPlayer'
@@ -9,6 +9,10 @@ import {
   PROJECT_STATUS_ARCHIVED,
   PROJECT_STATUS_COMPLETED,
   PROJECT_STATUS_IN_PROGRESS,
+  RECORDING_STATUS_APPROVED,
+  RECORDING_STATUS_PENDING,
+  RECORDING_STATUS_READY,
+  RECORDING_STATUS_REJECTED,
 } from '../../constants'
 import { useProjectStore } from '../../stores/projectStore'
 import { useQuestionStore } from '../../stores/questionStore'
@@ -16,6 +20,9 @@ import { useRecordingStore } from '../../stores/recordingStore'
 import { useTimelineStore } from '../../stores/timelineStore'
 import { formatDateTime, formatDuration } from '../../utils/format'
 import type { Recording, TimelineMarker } from '../../api/types'
+import SummaryReviewPanel from './SummaryReviewPanel'
+
+type ToastType = 'success' | 'error'
 
 export default function ProjectDetailPage() {
   const { id } = useParams()
@@ -27,6 +34,8 @@ export default function ProjectDetailPage() {
   const { markers, fetchByProject: fetchMarkers, create: createMarker } = useTimelineStore()
   const [newQuestion, setNewQuestion] = useState('')
   const [message, setMessage] = useState('')
+  const [toastType, setToastType] = useState<ToastType>('success')
+  const [archiving, setArchiving] = useState(false)
 
   useEffect(() => {
     if (projectId) {
@@ -37,15 +46,44 @@ export default function ProjectDetailPage() {
     }
   }, [projectId, fetchDetail, fetchByProject, fetchRecordings, fetchMarkers])
 
+  const notify = useCallback((msg: string, type: ToastType = 'success') => {
+    setMessage(msg)
+    setToastType(type)
+    setTimeout(() => setMessage(''), 4000)
+  }, [])
+
   const handleAddQuestion = useCallback(async () => {
     if (!newQuestion.trim()) return
     await createQuestion(projectId, newQuestion.trim())
     setNewQuestion('')
-    setMessage('采访问题已添加')
-    setTimeout(() => setMessage(''), 3000)
-  }, [createQuestion, newQuestion, projectId])
+    notify('采访问题已添加')
+  }, [createQuestion, newQuestion, projectId, notify])
 
+  // 审核队列：有音频且处于 就绪/待审核/已退回 的片段（录制中、失败等片段不在审核范围）。
+  const reviewRecordings = recordings.filter(
+    (r) =>
+      !!r.audio_key &&
+      [
+        RECORDING_STATUS_READY,
+        RECORDING_STATUS_PENDING,
+        RECORDING_STATUS_REJECTED,
+      ].includes(r.status),
+  )
+  const approvedRecordings = recordings.filter((r) => r.status === RECORDING_STATUS_APPROVED)
   const markersOf = (recordingId: number) => markers.filter((m) => m.recording_id === recordingId)
+
+  // 已完成 → 归档：存在待审核/已退回片段时后端会拒绝并提示条数。
+  const handleArchive = useCallback(async () => {
+    setArchiving(true)
+    try {
+      await transitionStatus(projectId, PROJECT_STATUS_ARCHIVED)
+      notify('项目已归档')
+    } catch (e) {
+      notify(e instanceof Error ? e.message : '归档失败', 'error')
+    } finally {
+      setArchiving(false)
+    }
+  }, [notify, projectId, transitionStatus])
 
   if (!detail) {
     return <div className="page">加载中…</div>
@@ -53,7 +91,7 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="page">
-      {message && <div className="toast success">{message}</div>}
+      {message && <div className={`toast ${toastType}`}>{message}</div>}
       <div className="page-header">
         <button className="btn btn-plain" onClick={() => navigate('/')}>
           ← 返回列表
@@ -84,18 +122,35 @@ export default function ProjectDetailPage() {
         </div>
         <div className="row-actions" style={{ marginTop: 12 }}>
           {detail.status !== PROJECT_STATUS_ARCHIVED && (
-            <button
-              className="btn btn-primary btn-small"
-              onClick={async () => {
-                const next =
-                  detail.status === PROJECT_STATUS_IN_PROGRESS ? PROJECT_STATUS_COMPLETED : PROJECT_STATUS_IN_PROGRESS
-                await transitionStatus(projectId, next)
-                setMessage('项目状态已更新')
-                setTimeout(() => setMessage(''), 3000)
-              }}
-            >
-              {detail.status === PROJECT_STATUS_IN_PROGRESS ? '标记为已完成' : '开始采访'}
-            </button>
+            <>
+              {detail.status === PROJECT_STATUS_IN_PROGRESS && (
+                <button
+                  className="btn btn-primary btn-small"
+                  onClick={async () => {
+                    try {
+                      await transitionStatus(projectId, PROJECT_STATUS_COMPLETED)
+                      notify('项目状态已更新为已完成')
+                    } catch (e) {
+                      notify(e instanceof Error ? e.message : '状态更新失败', 'error')
+                    }
+                  }}
+                >
+                  标记为已完成
+                </button>
+              )}
+              {detail.status === PROJECT_STATUS_COMPLETED && (
+                <ConfirmDialog
+                  title="归档采访项目"
+                  message="归档后项目进入档案库且不可再修改。存在待审核或已退回的片段时将无法归档，确定继续？"
+                  confirmText="归档"
+                  onConfirm={handleArchive}
+                >
+                  <button className="btn btn-primary btn-small" disabled={archiving}>
+                    {archiving ? '归档中…' : '归档项目'}
+                  </button>
+                </ConfirmDialog>
+              )}
+            </>
           )}
           <ConfirmDialog
             title="删除采访项目"
@@ -145,13 +200,43 @@ export default function ProjectDetailPage() {
       </section>
 
       <section className="card">
-        <div className="card-title">时间线 · 采访片段</div>
-        {recordings.length === 0 ? (
-          <EmptyState title="还没有录音片段" description="前往采访工作台开始录音，片段将按时间线展示" />
+        <div className="card-title">
+          摘要审核{reviewRecordings.length > 0 ? `（${reviewRecordings.length} 条待处理）` : ''}
+        </div>
+        <SummaryReviewPanel
+          recordings={reviewRecordings}
+          projectArchived={detail.status === PROJECT_STATUS_ARCHIVED}
+          onNotify={notify}
+        />
+        <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+          采访员提交有音频的片段后，由档案员或管理员审核；审核通过的片段才会进入下方项目时间轴。
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-title">时间线 · 已审核通过的采访片段</div>
+        {approvedRecordings.length === 0 ? (
+          <EmptyState
+            title="时间轴还没有片段"
+            description="只有摘要审核通过的录音片段才会出现在项目时间轴上"
+          />
         ) : (
           <div className="timeline">
-            {recordings.map((r) => (
-              <TimelineItem key={r.id} recording={r} markers={markersOf(r.id)} onCreateMarker={createMarker} />
+            {approvedRecordings.map((r) => (
+              <TimelineItem
+                key={r.id}
+                recording={r}
+                markers={markersOf(r.id)}
+                projectArchived={detail.status === PROJECT_STATUS_ARCHIVED}
+                onCreateMarker={async (payload) => {
+                  try {
+                    await createMarker(payload)
+                    notify('时间轴节点已标注')
+                  } catch (e) {
+                    notify(e instanceof Error ? e.message : '节点标注失败', 'error')
+                  }
+                }}
+              />
             ))}
           </div>
         )}
@@ -171,10 +256,12 @@ function LinkToInterview({ projectId }: { projectId: number }) {
 function TimelineItem({
   recording,
   markers,
+  projectArchived,
   onCreateMarker,
 }: {
   recording: Recording
   markers: TimelineMarker[]
+  projectArchived: boolean
   onCreateMarker: (payload: {
     project_id: number
     recording_id: number
@@ -200,6 +287,9 @@ function TimelineItem({
           <span className="summary-label">一句话摘要：</span>
           {recording.summary || <span className="muted">暂无摘要</span>}
         </div>
+        {recording.review_comment && (
+          <div className="review-comment">审核备注：{recording.review_comment}</div>
+        )}
         {markers.length > 0 && (
           <div className="marker-list">
             {markers.map((m) => (
@@ -210,28 +300,30 @@ function TimelineItem({
             ))}
           </div>
         )}
-        <div className="inline-form">
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="标注关键节点，如：回忆童年故居"
-          />
-          <button
-            className="btn btn-plain btn-small"
-            disabled={!label.trim()}
-            onClick={async () => {
-              await onCreateMarker({
-                project_id: recording.project_id,
-                recording_id: recording.id,
-                timestamp_second: recording.duration_seconds > 0 ? Math.floor(recording.duration_seconds / 2) : 0,
-                label: label.trim(),
-              })
-              setLabel('')
-            }}
-          >
-            ＋ 标注节点
-          </button>
-        </div>
+        {!projectArchived && (
+          <div className="inline-form">
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="标注关键节点，如：回忆童年故居"
+            />
+            <button
+              className="btn btn-plain btn-small"
+              disabled={!label.trim()}
+              onClick={async () => {
+                await onCreateMarker({
+                  project_id: recording.project_id,
+                  recording_id: recording.id,
+                  timestamp_second: recording.duration_seconds > 0 ? Math.floor(recording.duration_seconds / 2) : 0,
+                  label: label.trim(),
+                })
+                setLabel('')
+              }}
+            >
+              ＋ 标注节点
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

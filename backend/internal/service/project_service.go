@@ -25,13 +25,14 @@ type ProjectService interface {
 }
 
 type projectService struct {
-	projectRepo repository.ProjectRepository
-	logger      *slog.Logger
+	projectRepo   repository.ProjectRepository
+	recordingRepo repository.RecordingRepository
+	logger        *slog.Logger
 }
 
 // NewProjectService 构造项目服务。
-func NewProjectService(projectRepo repository.ProjectRepository, logger *slog.Logger) ProjectService {
-	return &projectService{projectRepo: projectRepo, logger: logger}
+func NewProjectService(projectRepo repository.ProjectRepository, recordingRepo repository.RecordingRepository, logger *slog.Logger) ProjectService {
+	return &projectService{projectRepo: projectRepo, recordingRepo: recordingRepo, logger: logger}
 }
 
 func (s *projectService) Create(actor *model.User, req *dto.CreateProjectRequest) (*model.Project, error) {
@@ -129,6 +130,17 @@ func (s *projectService) TransitionStatus(actor *model.User, id uint, status str
 	if !constants.CanTransitionProject(project.Status, status) {
 		return nil, util.NewAppError(constants.CodeProjectStatus,
 			fmt.Sprintf("项目 %d 状态不允许从 %s 流转到 %s", id, project.Status, status), nil)
+	}
+	// 归档前校验：存在待审核或已退回的录音片段时拒绝归档。
+	if status == constants.ProjectStatusArchived {
+		pending, err := s.recordingRepo.CountPendingReviewByProject(id)
+		if err != nil {
+			return nil, util.NewAppError(constants.CodeInternal, fmt.Sprintf("统计项目 %d 待审核片段失败", id), err)
+		}
+		if pending > 0 {
+			return nil, util.NewAppError(constants.CodeProjectStatus,
+				fmt.Sprintf("项目 %d 还有 %d 条录音片段待审核或已退回，全部审核通过后才能归档", id, pending), nil)
+		}
 	}
 	from := project.Status
 	project.Status = status

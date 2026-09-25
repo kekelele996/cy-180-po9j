@@ -12,10 +12,10 @@ import (
 )
 
 type fakeProjectRepo struct {
-	projects map[uint]*model.Project
-	updated  *model.Project
+	projects  map[uint]*model.Project
+	updated   *model.Project
 	forUpdate bool
-	err      error
+	err       error
 }
 
 func (f *fakeProjectRepo) Create(project *model.Project) error {
@@ -52,20 +52,48 @@ func (f *fakeProjectRepo) Update(project *model.Project) error {
 func (f *fakeProjectRepo) UpdateStatus(project *model.Project) error {
 	return f.Update(project)
 }
-func (f *fakeProjectRepo) Delete(id uint) error { return nil }
+func (f *fakeProjectRepo) Delete(id uint) error  { return nil }
 func (f *fakeProjectRepo) Count() (int64, error) { return 0, nil }
+
+// fakeRecordingRepo 仅实现归档守卫用到的 CountPendingReviewByProject。
+type fakeRecordingRepo struct {
+	pendingCount int64
+}
+
+func (f *fakeRecordingRepo) Create(recording *model.Recording) error { return nil }
+func (f *fakeRecordingRepo) FindByID(id uint) (*model.Recording, error) {
+	return nil, repository.ErrNotFound
+}
+func (f *fakeRecordingRepo) ListByProject(projectID uint, status string) ([]model.Recording, error) {
+	return nil, nil
+}
+func (f *fakeRecordingRepo) ListByQuestion(questionID uint, status string) ([]model.Recording, error) {
+	return nil, nil
+}
+func (f *fakeRecordingRepo) FindByIDForUpdate(id uint) (*model.Recording, error) {
+	return nil, repository.ErrNotFound
+}
+func (f *fakeRecordingRepo) Update(recording *model.Recording) error       { return nil }
+func (f *fakeRecordingRepo) UpdateStatus(recording *model.Recording) error { return nil }
+func (f *fakeRecordingRepo) Delete(id uint) error                          { return nil }
+func (f *fakeRecordingRepo) CountByProject(projectID uint) (int64, error)  { return 0, nil }
+func (f *fakeRecordingRepo) CountPendingReviewByProject(projectID uint) (int64, error) {
+	return f.pendingCount, nil
+}
 
 func TestProjectServiceTransitionStatus(t *testing.T) {
 	actor := &model.User{ID: 1, Username: "interviewer", Role: constants.RoleInterviewer}
 	cases := []struct {
-		name    string
-		from    string
-		to      string
-		wantErr bool
+		name         string
+		from         string
+		to           string
+		pendingCount int64
+		wantErr      bool
 	}{
 		{name: "draft to in_progress", from: constants.ProjectStatusDraft, to: constants.ProjectStatusInProgress},
 		{name: "in_progress to completed", from: constants.ProjectStatusInProgress, to: constants.ProjectStatusCompleted},
 		{name: "completed to archived", from: constants.ProjectStatusCompleted, to: constants.ProjectStatusArchived},
+		{name: "archived rejected when pending review", from: constants.ProjectStatusCompleted, to: constants.ProjectStatusArchived, pendingCount: 2, wantErr: true},
 		{name: "draft to completed is invalid", from: constants.ProjectStatusDraft, to: constants.ProjectStatusCompleted, wantErr: true},
 		{name: "archived cannot change", from: constants.ProjectStatusArchived, to: constants.ProjectStatusDraft, wantErr: true},
 		{name: "unknown status rejected", from: constants.ProjectStatusDraft, to: "unknown", wantErr: true},
@@ -75,7 +103,7 @@ func TestProjectServiceTransitionStatus(t *testing.T) {
 			repo := &fakeProjectRepo{projects: map[uint]*model.Project{
 				1: {ID: 1, Title: "测试项目", Status: tc.from},
 			}}
-			svc := NewProjectService(repo, slog.Default())
+			svc := NewProjectService(repo, &fakeRecordingRepo{pendingCount: tc.pendingCount}, slog.Default())
 			got, err := svc.TransitionStatus(actor, 1, tc.to)
 			if tc.wantErr {
 				if err == nil {
@@ -102,7 +130,7 @@ func TestProjectServiceTransitionStatus(t *testing.T) {
 
 func TestProjectServiceCreate(t *testing.T) {
 	repo := &fakeProjectRepo{projects: map[uint]*model.Project{}}
-	svc := NewProjectService(repo, slog.Default())
+	svc := NewProjectService(repo, &fakeRecordingRepo{}, slog.Default())
 	actor := &model.User{ID: 2, Username: "archivist", Role: constants.RoleArchivist}
 	req := &dto.CreateProjectRequest{
 		Title:           "老城记忆",

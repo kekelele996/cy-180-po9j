@@ -46,6 +46,9 @@ export interface Recording {
   duration_seconds: number
   summary: string
   status: RecordingStatus
+  review_comment: string
+  reviewed_by: number
+  reviewed_at: string | null
   created_by: number
   created_at: string
   updated_at: string

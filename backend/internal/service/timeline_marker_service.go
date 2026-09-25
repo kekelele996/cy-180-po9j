@@ -22,10 +22,10 @@ type TimelineMarkerService interface {
 }
 
 type timelineMarkerService struct {
-	markerRepo repository.TimelineMarkerRepository
-	projectRepo repository.ProjectRepository
+	markerRepo    repository.TimelineMarkerRepository
+	projectRepo   repository.ProjectRepository
 	recordingRepo repository.RecordingRepository
-	logger     *slog.Logger
+	logger        *slog.Logger
 }
 
 // NewTimelineMarkerService 构造时间轴节点服务。

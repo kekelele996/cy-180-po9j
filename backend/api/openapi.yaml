@@ -92,6 +92,30 @@ paths:
   /recordings/{id}/audio:
     post: { summary: 上传录音文件(multipart), tags: [recordings], security: [{ BearerAuth: [] }] }
     get: { summary: 播放录音音频流, tags: [recordings], security: [{ BearerAuth: [] }] }
+  /recordings/{id}/submit-review:
+    post:
+      summary: 采访员提交摘要审核（仅 interviewer；片段须有音频和摘要）
+      tags: [recordings]
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: 提交成功，片段状态变为 pending_review }
+  /recordings/{id}/review:
+    post:
+      summary: 档案员/管理员审核摘要（仅 archivist/admin；可修改摘要，通过或填意见退回）
+      tags: [recordings]
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approved]
+              properties:
+                approved: { type: boolean, description: true=通过，false=退回 }
+                summary: { type: string, description: 审核时修改后的一句话摘要 }
+                comment: { type: string, description: 审核意见，退回时必填 }
+      responses:
+        '200': { description: 审核完成，approved 后片段进入项目时间轴 }
   /timeline-markers:
     get:
       summary: 时间轴节点列表（project_id 或 recording_id）

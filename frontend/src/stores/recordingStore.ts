@@ -4,6 +4,8 @@ import {
   createRecording,
   deleteRecording,
   listRecordings,
+  reviewRecording,
+  submitRecordingForReview,
   updateRecordingSummary,
   uploadRecordingAudio,
 } from '../api/recording'
@@ -17,6 +19,8 @@ interface RecordingState {
   create: (payload: { project_id: number; question_id: number; duration_seconds?: number }) => Promise<Recording>
   uploadAudio: (id: number, blob: Blob, duration: number, onProgress?: (p: number) => void) => Promise<void>
   updateSummary: (id: number, summary: string) => Promise<void>
+  submitForReview: (id: number) => Promise<void>
+  review: (id: number, payload: { approved: boolean; summary?: string; comment?: string }) => Promise<void>
   remove: (id: number) => Promise<void>
 }
 
@@ -53,6 +57,16 @@ export const useRecordingStore = create<RecordingState>((set) => ({
 
   async updateSummary(id, summary) {
     const updated = await updateRecordingSummary(id, summary)
+    set((s) => ({ recordings: s.recordings.map((r) => (r.id === id ? updated : r)) }))
+  },
+
+  async submitForReview(id) {
+    const updated = await submitRecordingForReview(id)
+    set((s) => ({ recordings: s.recordings.map((r) => (r.id === id ? updated : r)) }))
+  },
+
+  async review(id, payload) {
+    const updated = await reviewRecording(id, payload)
     set((s) => ({ recordings: s.recordings.map((r) => (r.id === id ? updated : r)) }))
   },
 

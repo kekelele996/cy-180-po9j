@@ -39,6 +39,12 @@ func RecordingStatusText(status string) string {
 		return "就绪"
 	case constants.RecordingStatusFailed:
 		return "失败"
+	case constants.RecordingStatusPending:
+		return "待审核"
+	case constants.RecordingStatusRejected:
+		return "已退回"
+	case constants.RecordingStatusApproved:
+		return "已通过"
 	default:
 		return "未知"
 	}

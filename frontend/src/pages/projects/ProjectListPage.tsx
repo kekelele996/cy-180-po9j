@@ -22,6 +22,13 @@ export default function ProjectListPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [message, setMessage] = useState('')
+  const [messageType, setMessageType] = useState<'success' | 'error'>('success')
+
+  const notify = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+    setMessage(msg)
+    setMessageType(type)
+    setTimeout(() => setMessage(''), type === 'error' ? 5000 : 3000)
+  }, [])
 
   useEffect(() => {
     fetchList({ page: 1, page_size: 50, status: statusFilter })
@@ -31,7 +38,7 @@ export default function ProjectListPage() {
     async (values: ProjectFormValues) => {
       await create(values)
       setShowCreate(false)
-      setMessage('采访项目创建成功')
+      notify('采访项目创建成功')
       setTimeout(() => setMessage(''), 3000)
     },
     [create],
@@ -58,7 +65,7 @@ export default function ProjectListPage() {
           ＋ 新建采访项目
         </button>
       </div>
-      {message && <div className="toast success">{message}</div>}
+      {message && <div className={`toast ${messageType}`}>{message}</div>}
 
       <div className="filter-bar">
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -101,9 +108,14 @@ export default function ProjectListPage() {
                   <button
                     className="btn btn-plain btn-small"
                     onClick={async () => {
-                      await transitionStatus(p.id, nextStatus(p.status))
-                      setMessage('项目状态已更新')
-                      setTimeout(() => setMessage(''), 3000)
+                      try {
+                        await transitionStatus(p.id, nextStatus(p.status))
+                        notify('项目状态已更新')
+                        setTimeout(() => setMessage(''), 3000)
+                      } catch (e) {
+                        notify(e instanceof Error ? e.message : '项目状态更新失败', 'error')
+                        setTimeout(() => setMessage(''), 5000)
+                      }
                     }}
                   >
                     流转至{PROJECT_STATUS_OPTIONS.find((o) => o.value === nextStatus(p.status))?.label}
@@ -116,7 +128,7 @@ export default function ProjectListPage() {
                   danger
                   onConfirm={async () => {
                     await remove(p.id)
-                    setMessage('项目已删除')
+                    notify('项目已删除')
                     setTimeout(() => setMessage(''), 3000)
                   }}
                 >

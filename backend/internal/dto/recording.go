@@ -12,7 +12,14 @@ type CreateRecordingRequest struct {
 type UpdateRecordingRequest struct {
 	DurationSeconds int    `json:"duration_seconds" binding:"omitempty,min=0"`
 	Summary         string `json:"summary" binding:"omitempty,max=512"`
-	Status          string `json:"status" binding:"omitempty,oneof=recording processing ready failed"`
+	Status          string `json:"status" binding:"omitempty,oneof=recording processing ready failed pending_review rejected approved"`
+}
+
+// ReviewRecordingRequest 摘要审核请求：approved=true 通过；approved=false 退回，comment 必填。
+type ReviewRecordingRequest struct {
+	Approved bool   `json:"approved"`
+	Summary  string `json:"summary" binding:"omitempty,max=512"`
+	Comment  string `json:"comment" binding:"omitempty,max=512"`
 }
 
 // RecordingResponse 录音响应。

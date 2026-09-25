@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/oralhistory/oralhistory/internal/constants"
 	"github.com/oralhistory/oralhistory/internal/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -13,13 +14,15 @@ import (
 type RecordingRepository interface {
 	Create(recording *model.Recording) error
 	FindByID(id uint) (*model.Recording, error)
-	ListByProject(projectID uint) ([]model.Recording, error)
-	ListByQuestion(questionID uint) ([]model.Recording, error)
+	ListByProject(projectID uint, status string) ([]model.Recording, error)
+	ListByQuestion(questionID uint, status string) ([]model.Recording, error)
 	FindByIDForUpdate(id uint) (*model.Recording, error)
 	Update(recording *model.Recording) error
 	UpdateStatus(recording *model.Recording) error
 	Delete(id uint) error
 	CountByProject(projectID uint) (int64, error)
+	// CountPendingReviewByProject 统计项目下待审核或已退回的片段数（归档前校验用）。
+	CountPendingReviewByProject(projectID uint) (int64, error)
 }
 
 type recordingRepository struct {
@@ -49,17 +52,25 @@ func (r *recordingRepository) FindByID(id uint) (*model.Recording, error) {
 	return &recording, nil
 }
 
-func (r *recordingRepository) ListByProject(projectID uint) ([]model.Recording, error) {
+func (r *recordingRepository) ListByProject(projectID uint, status string) ([]model.Recording, error) {
 	var recordings []model.Recording
-	if err := r.db.Where("project_id = ?", projectID).Order("id ASC").Find(&recordings).Error; err != nil {
+	q := r.db.Where("project_id = ?", projectID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if err := q.Order("id ASC").Find(&recordings).Error; err != nil {
 		return nil, fmt.Errorf("list recordings of project %d: %w", projectID, err)
 	}
 	return recordings, nil
 }
 
-func (r *recordingRepository) ListByQuestion(questionID uint) ([]model.Recording, error) {
+func (r *recordingRepository) ListByQuestion(questionID uint, status string) ([]model.Recording, error) {
 	var recordings []model.Recording
-	if err := r.db.Where("question_id = ?", questionID).Order("id ASC").Find(&recordings).Error; err != nil {
+	q := r.db.Where("question_id = ?", questionID)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if err := q.Order("id ASC").Find(&recordings).Error; err != nil {
 		return nil, fmt.Errorf("list recordings of question %d: %w", questionID, err)
 	}
 	return recordings, nil
@@ -106,6 +117,19 @@ func (r *recordingRepository) CountByProject(projectID uint) (int64, error) {
 	var total int64
 	if err := r.db.Model(&model.Recording{}).Where("project_id = ?", projectID).Count(&total).Error; err != nil {
 		return 0, fmt.Errorf("count recordings of project %d: %w", projectID, err)
+	}
+	return total, nil
+}
+
+func (r *recordingRepository) CountPendingReviewByProject(projectID uint) (int64, error) {
+	var total int64
+	if err := r.db.Model(&model.Recording{}).
+		Where("project_id = ? AND status IN ?", projectID, []string{
+			constants.RecordingStatusPending,
+			constants.RecordingStatusRejected,
+		}).
+		Count(&total).Error; err != nil {
+		return 0, fmt.Errorf("count pending review recordings of project %d: %w", projectID, err)
 	}
 	return total, nil
 }

@@ -42,12 +42,18 @@ export const RECORDING_STATUS_RECORDING = 'recording'
 export const RECORDING_STATUS_PROCESSING = 'processing'
 export const RECORDING_STATUS_READY = 'ready'
 export const RECORDING_STATUS_FAILED = 'failed'
+export const RECORDING_STATUS_PENDING = 'pending_review'
+export const RECORDING_STATUS_REJECTED = 'rejected'
+export const RECORDING_STATUS_APPROVED = 'approved'
 
 export const RECORDING_STATUS_TEXT: Record<string, string> = {
   [RECORDING_STATUS_RECORDING]: '录制中',
   [RECORDING_STATUS_PROCESSING]: '处理中',
   [RECORDING_STATUS_READY]: '就绪',
   [RECORDING_STATUS_FAILED]: '失败',
+  [RECORDING_STATUS_PENDING]: '待审核',
+  [RECORDING_STATUS_REJECTED]: '已退回',
+  [RECORDING_STATUS_APPROVED]: '已通过',
 }
 
 // 错误码（与后端 constants/error_codes.go 同步）
@@ -69,5 +75,12 @@ export const ERROR_CODES = {
 } as const
 
 export type ProjectStatus = typeof PROJECT_STATUS_DRAFT | typeof PROJECT_STATUS_IN_PROGRESS | typeof PROJECT_STATUS_COMPLETED | typeof PROJECT_STATUS_ARCHIVED
-export type RecordingStatus = typeof RECORDING_STATUS_RECORDING | typeof RECORDING_STATUS_PROCESSING | typeof RECORDING_STATUS_READY | typeof RECORDING_STATUS_FAILED
+export type RecordingStatus =
+  | typeof RECORDING_STATUS_RECORDING
+  | typeof RECORDING_STATUS_PROCESSING
+  | typeof RECORDING_STATUS_READY
+  | typeof RECORDING_STATUS_FAILED
+  | typeof RECORDING_STATUS_PENDING
+  | typeof RECORDING_STATUS_REJECTED
+  | typeof RECORDING_STATUS_APPROVED
 export type Role = typeof ROLE_ADMIN | typeof ROLE_INTERVIEWER | typeof ROLE_ARCHIVIST

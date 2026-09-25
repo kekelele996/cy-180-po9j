@@ -15,6 +15,9 @@ const STYLES: Record<string, string> = {
   processing: 'badge-processing',
   ready: 'badge-ready',
   failed: 'badge-failed',
+  pending_review: 'badge-pending',
+  rejected: 'badge-rejected',
+  approved: 'badge-approved',
 }
 
 export default function StatusBadge({ status, type = 'project' }: StatusBadgeProps) {

@@ -1,6 +1,6 @@
 # 口述历史采集工具（OralHistory）
 
-一个全栈的口述历史采集工具：登录后创建采访项目，填写受访者姓名、出生年份与背景简介；采访过程中支持录音并自动关联到对应问题；结束后在时间轴上标注关键节点，并为每段录音撰写一句话摘要；项目页按时间线展示全部采访片段，可点击播放录音并查看摘要。
+一个全栈的口述历史采集工具：登录后创建采访项目，填写受访者姓名、出生年份与背景简介；采访过程中支持录音并自动关联到对应问题；采访员为每段录音撰写一句话摘要后提交档案员/管理员审核（可修改摘要或填意见退回），只有审核通过的片段才会出现在项目时间轴上，可点击播放录音并查看摘要；归档时若仍有待审核或已退回的片段会被拒绝。
 
 ## 快速启动（Docker Compose，推荐）
 
@@ -35,7 +35,9 @@ docker compose down -v --remove-orphans
 - 采访项目管理：创建、编辑、状态流转（草稿 → 进行中 → 已完成 → 已归档）、删除
 - 采访问题管理：为项目添加问题清单，作为录音提纲
 - 录音管理：浏览器端录音 → 上传 MinIO → 自动关联到对应问题 → 一句话摘要
-- 时间轴：按项目/录音标注关键节点，项目页按时间线展示所有片段并支持播放
+- 摘要审核：采访员把有音频的片段提交档案员/管理员审核；审核可修改摘要、填写意见退回；只有审核通过的片段才出现在项目时间轴
+- 归档守卫：项目归档时若仍有待审核或已退回的片段，接口拒绝（409）并返回剩余条数
+- 时间轴：按项目/录音标注关键节点，项目页按时间线展示已审核通过的片段并支持播放
 - 操作审计日志（仅管理员）、全局错误处理与请求追踪（request_id）
 
 ## 技术栈
@@ -151,11 +153,13 @@ npm run dev                # 默认 http://localhost:5173，/api 代理到 http:
 | POST | /api/v1/projects/:id/questions | 添加问题 | 登录 |
 | PUT | /api/v1/questions/:id | 更新问题 | 登录 |
 | DELETE | /api/v1/questions/:id | 删除问题 | 登录 |
-| GET | /api/v1/recordings?project_id= 或 ?question_id= | 录音列表（复用 RecordingService.List） | 登录 |
+| GET | /api/v1/recordings?project_id= 或 ?question_id=（可加 &status=pending_review 等状态筛选） | 录音列表（复用 RecordingService.List） | 登录 |
 | POST | /api/v1/recordings | 创建录音记录 | 登录 |
 | GET | /api/v1/recordings/:id | 录音详情 | 登录 |
 | PUT | /api/v1/recordings/:id | 更新录音 | 登录 |
 | PUT | /api/v1/recordings/:id/summary | 更新一句话摘要 | 登录 |
+| POST | /api/v1/recordings/:id/submit-review | 采访员提交摘要审核（须有音频和摘要） | 采访员 |
+| POST | /api/v1/recordings/:id/review | 摘要审核：可修改摘要，`{"approved":true}` 通过或 `{"approved":false,"comment":"..."}` 退回 | 档案员/管理员 |
 | POST | /api/v1/recordings/:id/audio | 上传录音（multipart） | 登录 |
 | GET | /api/v1/recordings/:id/audio | 播放音频流 | 登录 |
 | DELETE | /api/v1/recordings/:id | 删除录音 | 登录 |
@@ -204,15 +208,30 @@ curl -sS -X PUT http://localhost:9180/api/v1/recordings/1/summary \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"summary":"王奶奶回忆童年在胡同里捉迷藏的趣事"}'
 
-# 标注时间轴节点
+# 采访员提交摘要审核（录音必须已上传音频且已填写摘要）
+curl -sS -X POST http://localhost:9180/api/v1/recordings/1/submit-review \
+  -H "Authorization: Bearer $TOKEN"
+
+# 档案员/管理员通过审核（可同时修改摘要；通过后片段才出现在项目时间轴）
+curl -sS -X POST http://localhost:9180/api/v1/recordings/1/review \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"approved":true,"summary":"王奶奶回忆童年在胡同捉迷藏，并提到老院中的枣树"}'
+
+# 档案员/管理员填写意见后退回
+curl -sS -X POST http://localhost:9180/api/v1/recordings/1/review \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"approved":false,"comment":"摘要过于笼统，请补充时间与人物细节"}'
+
+# 标注时间轴节点（通常只对已审核通过的片段标注）
 curl -sS -X POST http://localhost:9180/api/v1/timeline-markers \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"project_id":1,"recording_id":1,"timestamp_second":6,"label":"讲到胡同捉迷藏","note":"情绪激动"}'
 
-# 项目状态流转
+# 项目状态流转（归档时若仍有待审核/已退回的片段，接口返回 409 并告知条数）
 curl -sS -X PUT http://localhost:9180/api/v1/projects/1/status \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"status":"in_progress"}'
+# => {"code":40902,"message":"项目 1 还有 2 条录音片段待审核或已退回，全部审核通过后才能归档",...}
 
 # 审计日志（管理员）
 curl -sS "http://localhost:9180/api/v1/audit-logs?page=1&page_size=10" -H "Authorization: Bearer $TOKEN"
@@ -263,25 +282,29 @@ curl -sS "http://localhost:9180/api/v1/audit-logs?page=1&page_size=10" -H "Autho
 - `frontend/src/pages/projects/ProjectDetailPage.tsx`（状态流转按钮）
 - `frontend/src/api/types.ts`（ProjectStatus 类型）
 
-### 3. 录音状态 RecordingStatus（recording / processing / ready / failed）
+### 3. 录音状态 RecordingStatus（recording / processing / ready / failed / pending_review / rejected / approved）
 
 后端出现位置：
 - `backend/internal/constants/recording_status.go`（定义、校验、状态机流转 CanTransitionRecording）
-- `backend/internal/model/recording.go`（status 字段）
-- `backend/internal/dto/recording.go`（Update 的 oneof 校验）
-- `backend/internal/service/recording_service.go`（状态机校验、AttachAudio 置为 ready）
-- `backend/internal/handler/recording_handler.go`（更新/上传接口）
+- `backend/internal/model/recording.go`（status 字段，review_comment/reviewed_by/reviewed_at 审核字段）
+- `backend/internal/dto/recording.go`（Update 的 oneof 校验、ReviewRecordingRequest）
+- `backend/internal/service/recording_service.go`（状态机校验、AttachAudio 置为 ready、SubmitForReview/Review）
+- `backend/internal/handler/recording_handler.go`（更新/上传/提交审核/审核接口）
+- `backend/internal/router/recording.go`（submit-review 限采访员、review 限档案员/管理员的 RBAC）
+- `backend/internal/repository/recording_repository.go`（status 筛选、CountPendingReviewByProject）
+- `backend/internal/service/project_service.go`（归档前统计待审核/已退回片段并拒绝）
 - `backend/internal/util/formatters.go`（RecordingStatusText）
-- `backend/internal/constants/log_templates.go`（LogRecordingUpload/Status 含 status）
+- `backend/internal/constants/log_templates.go`（LogRecordingUpload/Status/ReviewSubmit/Review 含 status）
 - `backend/internal/constants/error_codes.go`（CodeRecordingStatus）
 
 前端出现位置：
 - `frontend/src/constants/index.ts`（RECORDING_STATUS_* / RECORDING_STATUS_TEXT）
 - `frontend/src/utils/format.ts`（recordingStatusText）
-- `frontend/src/components/StatusBadge.tsx`（录音状态徽标）
-- `frontend/src/pages/projects/ProjectDetailPage.tsx`（时间线状态展示）
-- `frontend/src/pages/interview/InterviewPage.tsx`（录音面板状态展示）
-- `frontend/src/api/types.ts`（RecordingStatus 类型）
+- `frontend/src/components/StatusBadge.tsx`（录音状态徽标样式）
+- `frontend/src/pages/projects/ProjectDetailPage.tsx`（仅 approved 进入时间线、归档入口）
+- `frontend/src/pages/projects/SummaryReviewPanel.tsx`（提交审核、通过/退回面板）
+- `frontend/src/pages/interview/InterviewPage.tsx`（录音面板提交/重新提交）
+- `frontend/src/api/types.ts`（RecordingStatus 类型与审核字段）
 
 ## Docker 部署说明
 
